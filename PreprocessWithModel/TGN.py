@@ -321,4 +321,3 @@ if __name__ == "__main__":
 
     pd.concat([pd.Series(le.classes_), pd.DataFrame(X), pd.DataFrame(y)], axis=1).to_csv('tgn_output.csv', index=False)
     print(f"\nTraining complete! Total time: {(time.time() - start_time) / 60:.2f} minutes.")
- 
