@@ -1,24 +1,15 @@
 """
-Temporal Graph Network (TGN) data preparation and training utilities.
+Temporal Graph Network (TGN) feature generation and stage-1 training.
 
-This module loads preprocessed account alert and transaction data, constructs
-edge features for temporal graph learning, defines the TGN and related
-components, and trains the stage-1 TGN model for link prediction on the
-transaction graph.
+This module loads preprocessed transaction and alert-account data, constructs
+edge attributes for temporal graph learning, defines the TGN architecture, and
+trains the stage-1 TGN model via link prediction on the transaction graph.
 
-Stage 1 (TGN model):
-    A Temporal Graph Network is rolled over the transaction stream to maintain
-    node-level temporal memories. These memories are updated with event-based
-    messages and Transformer-style graph attention, producing dynamic node
-    embeddings over time.
-
-Stage 2 (node classifier, optional):
-    A node-level classifier is defined on top of final node memories and can be
-    trained in a separate pipeline to produce binary predictions (e.g.,
-    fraudulent vs. normal accounts).
-
-The module also defines model hyperparameters, initializes temporal datasets,
-and configures data loaders required for event-driven TGN training.
+After training, it rolls the model over the full transaction stream to obtain
+final node memory embeddings and exports them, together with account IDs and
+binary alert labels, to `tgn_output.csv`. These TGN features are intended to
+be merged later with additional handcrafted features in separate scripts
+(e.g., XGBClassifier.py) for downstream classifier training.
 """
 
 import torch
@@ -183,7 +174,7 @@ class TGNModel(torch.nn.Module):
 
 class NodeClassifier(torch.nn.Module):
     """
-    Node-level classifier on top of TGN memory (stage 2).
+    Node-level classifier on top of TGN memory.
 
     Takes final node memory vectors as input and outputs a binary fraud
     score for each node (account).
@@ -263,9 +254,13 @@ def train_tgn_stage1(model, data, optimizer, device, epoch):
 
 if __name__ == "__main__":
 
+    import time
+    start_time = time.time()
+
     print("start TGN training...")
-    alert_acct = pd.read_parquet(r'40_初賽資料_V3 1/初賽資料/acct_alert.parquet', engine='pyarrow')
-    all_data = pd.read_parquet(r'40_初賽資料_V3 1/初賽資料/acct_transaction.parquet', engine='pyarrow').sort_values(by='txn_date').reset_index(drop=True)
+
+    alert_acct = pd.read_parquet(r'acct_alert.parquet', engine='pyarrow')
+    all_data = pd.read_parquet(r'acct_transaction.parquet', engine='pyarrow').sort_values(by='txn_date').reset_index(drop=True)
 
     all_data = build_edge_attr(all_data)
     msg_df = all_data.drop(columns=['t', 'from_acct', 'to_acct'])
@@ -277,9 +272,10 @@ if __name__ == "__main__":
     dst = torch.tensor(le.transform(all_data['to_acct'].values))
     t = torch.tensor(all_data['t'].values.astype(int))
     msg = torch.tensor(msg_df.values.astype(float), dtype=torch.float32)
-    data_tgn = TemporalData(src=src, dst=dst, t=t, msg=msg).to(device=device)
 
+    data_tgn = TemporalData(src=src, dst=dst, t=t, msg=msg).to(device=device)
     num_nodes = len(le.classes_)
+
     tgn_model = TGNModel(num_nodes=num_nodes,raw_msg_dim=msg_df.shape[1], memory_dim=MEMORY_DIM, time_dim=TEMPORAL_DIM).to(device)
     optimizer_tgn = torch.optim.Adam(tgn_model.parameters(), lr=TGN_LR)
 
@@ -287,23 +283,26 @@ if __name__ == "__main__":
         loss = train_tgn_stage1(tgn_model, data_tgn, optimizer_tgn, device, epoch)
         torch.cuda.empty_cache()
         print(f"TGN Epoch {epoch+1}/{TGN_EPOCHS}, Link Pred Loss: {loss:.4f}")
-
+    """
+    待修改
     # torch.save(tgn_model.state_dict(), 'tgn_model.pth')
 
     # read = torch.load('tgn_model.pth')
     # tgn_model.load_state_dict(read)
+    """
     torch.cuda.empty_cache()
-    # 1. 獲取 TGN 最終記憶 (在 CPU 上)
+    
+    # Obtain TGN's final memory
     rollforward_loader = TemporalDataLoader(data_tgn, batch_size=TGN_BATCH_SIZE * 16)
     with torch.no_grad():
         final_memory = tgn_model.get_final_memory(rollforward_loader)
     
-    # [修改] 轉換為 NumPy
+    # trans type to NumPy
     final_memory_np = final_memory.numpy()
-    print(f"最終記憶向量已獲取，形狀 (Final memory shape): {final_memory_np.shape}")
+    print(f"The final memory vector has been obtained. memory shape: {final_memory_np.shape}")
 
-    # 2. 準備 (X, y) 數據集 (使用 NumPy)
-    print("從所有節點準備 (X, y) 數據集...")
+    # Prepare training set
+    print("Prepare a (X, y) dataset from all nodes...")
     pos_acct_set = set(alert_acct['acct'].values)
     all_accts_in_encoder = le.classes_
 
@@ -311,7 +310,7 @@ if __name__ == "__main__":
     y_labels = []
 
     for i, acct in enumerate(tqdm(all_accts_in_encoder, desc="準備分類器數據")):
-        # 使用索引 i 從 final_memory_np 獲取特徵
+        # Retrieve features from final_memory_np using index i
         mem = final_memory_np[i]
         label = 1 if acct in pos_acct_set else 0
         X_mem.append(mem)
@@ -321,5 +320,5 @@ if __name__ == "__main__":
     y = np.array(y_labels)
 
     pd.concat([pd.Series(le.classes_), pd.DataFrame(X), pd.DataFrame(y)], axis=1).to_csv('tgn_output.csv', index=False)
-    print(f"\n訓練完成！總耗時: {(time.time() - start_time) / 60:.2f} 分鐘。")
+    print(f"\nTraining complete! Total time: {(time.time() - start_time) / 60:.2f} minutes.")
  

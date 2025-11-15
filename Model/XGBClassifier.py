@@ -1,10 +1,10 @@
 import pandas as pd
-from tqdm import tqdm
-from sklearn.metrics import f1_score
-from sklearn.base import clone
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 from xgboost import XGBClassifier
+from sklearn.metrics import f1_score
+from sklearn.base import clone
 
 class PU2S:
     def __init__(self, base_estimator, reliable_negative, iterations, positive_threshold=0.95, negative_threshold=0.05):
@@ -39,8 +39,6 @@ class PU2S:
 
         try:
             while self.trained < self.iterations:
-                # if self.model[self.trained] is None:
-                #     self.model[self.trained].append(self.base_estimator.copy())
                 self._fit(self.model[self.trained], X_train, y_train, eval_set=[(eval_x.drop(columns=['acct']), eval_y)] if eval_set is not None else None, **fit_params)
                 result = self._predict_proba(self.model[self.trained], X)
                 positive_threshold = self.positive_threshold if result.max() > self.positive_threshold else result.max() if result.max() > 0.8 else 1
@@ -50,11 +48,8 @@ class PU2S:
                 self.pbar.set_postfix_str(f"Eval Score: {self.eval_score[-1]:.4f}, train_size: {self.train_size[-1]}")
                 self.pbar.update(1)
                 self.trained = self.trained + 1
-                # if positive_threshold == 1 and negative_threshold == 0:
-                #     break
                 if np.std(self.train_size[-10:]) <= 0 and self.trained > 10 and np.std(self.eval_score[-10:]) < 0.01:
                     break
-
                 X_train = pd.concat([X_train, X[result > positive_threshold]])
                 y_train = pd.concat([y_train, pd.Series([1]*sum(result > positive_threshold))])
                 X_train = pd.concat([X_train, X[result < negative_threshold]]).reset_index(drop=True)
@@ -75,9 +70,10 @@ class PU2S:
         return self.model[-1].predict_proba(X)[:, 1]
 
 if __name__ == "__main__":
-    # 讀取資料
+    
+    # Read file.
     all_data = pd.read_csv('final_data.csv').drop(columns=['0.2'])
-    test_y = pd.read_csv(r'40_初賽資料_V3 1/初賽資料/acct_predict.csv')
+    test_y = pd.read_csv(r'acct_predict.csv')
     safe_acct = pd.read_csv('safe_acct.csv')
     eval_set = pd.concat([all_data[all_data['acct'].isin(safe_acct['acct'])].sample(10), all_data[all_data['is_alert'] == 1].sample(10)])
     train = all_data.drop(index=eval_set.index).reset_index(drop=True)
