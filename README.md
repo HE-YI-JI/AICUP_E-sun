@@ -1,5 +1,9 @@
-1.執行Model/TGN
+#__Project introduction__
+### This is our project for 2025 AIcup event. We use Temporal Graph Network(TGN) to produce efficient feature. Using the produced features with original features, our xgboost model accuracy get higher obviously.
 
-2.執行Preprocess/XGBClassifier
-
-3.執行執行Model/XGBClassifier
+## Bullet list
+### - csv2parquet/
+###   - csv2parquet.py
+### - Model/
+###   - TGN.py
+###   - XGBClassifier.py
