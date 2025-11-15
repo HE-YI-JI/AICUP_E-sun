@@ -4,14 +4,16 @@
 ## Bullet list
 #### ├── csv2parquet
 #### │ ├── csv2parquet.py
-#### │
 #### ├── Model
 #### │ ├── XGBClassifier.py
-#### │
 #### ├── Preprocess
-#### │ ├── XGBClassifier.py
-#### │
+#### │ ├── NormalFeat.py
 #### ├── PreprocessWithModel
 #### │ ├── TGN.py
 #### │
 #### └── README.md
+
+## How to reproduce?
+#### 1. Transform the CSV file first. We use the data in another type in somewhere. You can Transform all data in 'csv2parquet/csv2parquet.py'
+#### 2. Execute 'PreprocessWithModel/TGN.py'. You will receive a CSV of efficient features about the trade informs.
+#### 3. Execute 'Preprocess/NormalFeat.py'. You will receive a CSV of the normal features we designed.
