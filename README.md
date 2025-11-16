@@ -17,8 +17,11 @@ We use a Temporal Graph Network (TGN) to generate temporal features from transac
     - `safe_acct.csv`
 
 ---
-## Project Introduction
-python version: 3.12
+## Project Env
+- **Python version:**
+    - 3.12
+- **Package:**
+    - See requirements.txt
 
 ---
 
