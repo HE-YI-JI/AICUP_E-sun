@@ -1,26 +1,58 @@
+"""
+Build node-level features from transaction data for downstream XGBoost training.
 
+This module loads alert account labels and raw transaction records, constructs
+account-based aggregate features (amount statistics, digit patterns, night and
+large transaction ratios), and joins them with TGN outputs to produce the final
+training dataset for an XGB classifier.
+"""
+import datetime
 import pandas as pd
 import dask.array as da
 import dask.dataframe as dd
 import numpy as np
 import yfinance as yf
-import datetime
-# alert_acct = pd.read_csv(r'40_初賽資料_V3 1/初賽資料/acct_alert.csv')
-alert_acct = dd.read_parquet(r'40_初賽資料_V3 1/初賽資料/acct_alert.parquet', engine='pyarrow')
+
+alert_acct = dd.read_parquet(r'acct_alert.parquet', engine='pyarrow')
 
 def get_fx_rate(code, date) -> float:
+    """
+    Fetch FX rate to TWD for a given currency code and date.
+
+    For most currencies, this queries the <code>TWD=X</code> pair from Yahoo
+    Finance starting at the given date and takes the first available closing
+    price. For MXN, the rate is computed as USD→TWD multiplied by MXN→USD.
+    """
     if code != 'MXN':
         return yf.Ticker(code+"TWD=X").history(start=date, end=date+datetime.timedelta(days=1400)).iloc[0]['Close']
     else:
         return get_fx_rate('USD', date) * yf.Ticker("MXNUSD=X").history(start=date, end=date+datetime.timedelta(days=1400)).iloc[0]['Close']
 
 def build_node_feature(data: dd.DataFrame) -> dd.DataFrame:
+    """
+    Build account-level features from raw transaction records.
+
+    The input is a Dask DataFrame of edge-level transactions with at least
+    the following columns: from_acct, to_acct, txn_date, txn_time, txn_amt,
+    currency_type, and is_self_txn. The function aggregates these records
+    into one row per account ('acct') and computes:
+
+    * Daily transaction date dispersion for senders and receivers.
+    * Digit-based statistics (first/second/third/last digit of amounts).
+    * Log-transformed amount statistics for sent and received transactions.
+    * Night-time transaction statistics (23:00–06:00).
+    * Large transaction statistics (txn_amt > 30000).
+    * Ratios such as night_txn_ratio and large_txn_night_ratio.
+    * Maximum counterpart count and whether the account appears in alert_acct.
+
+    Returns a Dask DataFrame with one row per account containing all engineered features.
+    """
     data = data.copy()
-    # data = data.compute()
     df = dd.DataFrame.from_dict({})
+
     df['acct'] = dd.concat([data['from_acct'], data['to_acct']]).drop_duplicates()
+
     df = df.reset_index(drop=True)
-    
     df = df.join(data.groupby('from_acct').txn_date.std().rename('daily_send_std'), on='acct', how='left')
     df = df.join(data.groupby('to_acct').txn_date.std().rename('daily_recv_std'), on='acct', how='left')
     
@@ -32,8 +64,6 @@ def build_node_feature(data: dd.DataFrame) -> dd.DataFrame:
     data[data['is_foreign'] == 1]['txn_amt'] = data[data['is_foreign'] == 1].apply(
         lambda row: row['txn_amt'] * get_fx_rate(row['currency_type'], row['txn_date']), axis=1, meta=('txn_amt', 'float64')
     )
-    BENFORD = np.log10(1 + 1 / np.arange(1, 10))
-    # data['first_digit'] = data['txn_amt'].astype(str).str[0].astype(int)
     data['first_digit'] = dd.to_numeric(data['txn_amt'].astype(str).str.get(0), errors='coerce')
     data.groupby('first_digit').size()
     
@@ -174,26 +204,23 @@ def build_node_feature(data: dd.DataFrame) -> dd.DataFrame:
         large_recv_foreign_count=('is_foreign', 'count'),
         large_recv_self_txn_ratio=('is_self_txn', 'mean')
     ), on='acct', how='left')
-    df = df.join(data.groupby('to_acct').from_acct.nunique().rename('large_recv_acct_nunique'), on='acct', how='left')
 
+    df = df.join(data.groupby('to_acct').from_acct.nunique().rename('large_recv_acct_nunique'), on='acct', how='left')
     df = df.fillna(0)
     df['night_txn_ratio'] = ((df['night_send_sum'] + df['night_recv_sum']) / (df['send_count'] + df['recv_count'])).where(df['send_count'] + df['recv_count'] != 0, 0)
-    
     large_txn_night = large_txn[(large_txn['txn_time'].dt.hour >= 22) | (large_txn['txn_time'].dt.hour < 6)]
     df = df.join(large_txn_night.groupby('from_acct').txn_amt.count().add(large_txn_night.groupby('to_acct').txn_amt.count(), fill_value=0).rename('large_txn_night_count'), on='acct', how='left').fillna(0)
     df['large_txn_night_ratio'] = (df['large_txn_night_count'] / (df['large_send_count'] + df['large_recv_count'])).where((df['large_send_count'] + df['large_recv_count']) != 0, 0)
-
     df = df.join(data.groupby(['from_acct', 'to_acct']).size().groupby('from_acct').max().add(data.groupby(['to_acct', 'from_acct']).size().groupby('to_acct').max(), fill_value=0).rename('acct_count_max'), on='acct', how='left').fillna(0)
-
     df['is_alert'] = df['acct'].isin(alert_acct['acct']).astype(bool)
 
     return df
 
 if __name__ == "__main__":
-    # all_data = pd.read_csv(r'40_初賽資料_V3 1/初賽資料/acct_transaction.csv')
-    all_data = dd.read_parquet(r'40_初賽資料_V3 1/初賽資料/acct_transaction.parquet', engine='pyarrow')
+    # Read the file produced by csv2parquet.py
+    all_data = dd.read_parquet(r'acct_transaction.parquet', engine='pyarrow')
     node_feature = build_node_feature(all_data).compute()
-
     df = pd.read_csv('tgn_output.csv')
 
+    # merge the features of tgn_output.csv and this 'node_feature', save to 'final_data.csv'.
     node_feature.merge(df, left_on='acct', right_on='0', how='outer').drop(columns=['0']).to_csv('final_data.csv', index=False)
