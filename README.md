@@ -7,15 +7,15 @@ By combining these TGN features with handcrafted normal features, our XGBoost mo
 
 ## Project Structure
 - **csv2parquet/**
-    - `csv2parquet.py` — Convert CSV files into Parquet format.
+    - `csv2parquet.py`
 - **Model/**
-    - `XGBClassifier.py` — Final classifier using PU learning + XGBoost.
+    - `XGBClassifier.py`
 - **Preprocess/**
-    - `NormalFeat.py` — Build handcrafted feature set.
+    - `NormalFeat.py`
 - **PreprocessWithModel/**
-    - `TGN.py` — Generate temporal graph features using TGN.
+    - `TGN.py`
 - **Reliable_neg_acct/**
-    - `safe_acct.csv` — Fallback safe accounts for submission.
+    - `safe_acct.csv`
 
 ---
 
