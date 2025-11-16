@@ -283,13 +283,7 @@ if __name__ == "__main__":
         loss = train_tgn_stage1(tgn_model, data_tgn, optimizer_tgn, device, epoch)
         torch.cuda.empty_cache()
         print(f"TGN Epoch {epoch+1}/{TGN_EPOCHS}, Link Pred Loss: {loss:.4f}")
-    """
-    待修改
-    # torch.save(tgn_model.state_dict(), 'tgn_model.pth')
 
-    # read = torch.load('tgn_model.pth')
-    # tgn_model.load_state_dict(read)
-    """
     torch.cuda.empty_cache()
     
     # Obtain TGN's final memory

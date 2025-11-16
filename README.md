@@ -1,21 +1,48 @@
-# __Project introduction__
-#### This is our project for 2025 AI cup event. We use Temporal Graph Network(TGN) to produce efficient features. Using the produced features with original features, our xgboost model accuracy get higher obviously.
+# Project Introduction
+This is our project for the 2025 AI Cup.  
+We use a Temporal Graph Network (TGN) to generate temporal features from transaction data.  
+By combining these TGN features with handcrafted normal features, our XGBoost model achieves a significant performance improvement.
 
-## Bullet list
-- csv2parquet
-    - csv2parquet.py
-- Model
-    - XGBClassifier.py
-- Preprocess
-    - GetFeature4PURN.py
-    - NormalFeat.py
-- PreprocessWithModel
-    - PURN4ReliableAcct.py
-    - TGN.py
+---
 
-## How to reproduce?
-#### 1. Execute 'Preprocess/GetFeature4PURN.py' to get 'Feature.csv'. The file would been used in 'PreprocessWithModel/PURN4ReliableAcct.py'.
-#### 2. Execute 'PreprocessWithModel/PURN4ReliableAcct.py' to get 'Feature.csv'. The file would been used in 'PreprocessWithModel/PURN4ReliableAcct.py'.
-#### 3. Transform the CSV file first. We use the data in another type in somewhere. You can transform all data by 'csv2parquet/csv2parquet.py.'
-#### 4. Execute 'PreprocessWithModel/TGN.py'. You will receive a CSV of efficient features about the trade informs.
-#### 5. Execute 'Preprocess/NormalFeat.py'. You will receive a CSV of the normal features we designed.
+## Project Structure
+- **csv2parquet/**
+    - `csv2parquet.py` — Convert CSV files into Parquet format.
+- **Model/**
+    - `XGBClassifier.py` — Final classifier using PU learning + XGBoost.
+- **Preprocess/**
+    - `NormalFeat.py` — Build handcrafted feature set.
+- **PreprocessWithModel/**
+    - `TGN.py` — Generate temporal graph features using TGN.
+- **Reliable_neg_acct/**
+    - `safe_acct.csv` — Fallback safe accounts for submission.
+
+---
+
+## How to Reproduce
+
+### 1. Convert raw CSV data
+Run `csv2parquet/csv2parquet.py` to transform all raw CSV files into Parquet format.
+
+### 2. Generate temporal graph features (TGN)
+Execute: PreprocessWithModel/TGN.py
+
+This produces **tgn_output.csv**, containing temporal graph features derived from account–transaction interactions.
+
+### 3. Generate normal handcrafted features
+Execute: Preprocess/NormalFeat.py
+
+This produces **final_data.csv**, which merges handcrafted features with TGN features.
+
+---
+
+## Final Model
+After all features are prepared, run: Model/XGBClassifier.py
+
+This script performs PU learning with XGBoost and outputs the final prediction file for submission.
+
+---
+
+## Notes
+All feature files must be placed in the correct directory structure as shown above.  
+Ensure that Parquet and CSV input files match the expected names before execution.
