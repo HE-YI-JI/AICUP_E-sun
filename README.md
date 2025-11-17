@@ -22,6 +22,10 @@ We use a Temporal Graph Network (TGN) to generate temporal features from transac
     - 3.12
 - **Package:**
     - See requirements.txt
+- **Hwrdware:**
+    - Ultra 9 285k
+    - 64GB DDR5
+    - RTX 5090
 
 ---
 
